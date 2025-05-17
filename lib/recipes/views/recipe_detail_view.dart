@@ -1,6 +1,4 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../food_diary/widgets/experience_card.dart';
 import '../../food_diary/bloc/diary_bloc.dart';
@@ -33,30 +31,6 @@ class _RecipeDetailViewState extends State<RecipeDetailView> {
     }
   }
 
-  // Helper method to check if an image exists in assets
-  Future<bool> _checkImageExists(String imagePath) async {
-    try {
-      // First check if it's an asset
-      final assetPath = 'assets/images/$imagePath';
-      await rootBundle.load(assetPath);
-      return true;
-    } catch (e) {
-      // If not an asset, check if it's a file
-      final file = File(imagePath);
-      return await file.exists();
-    }
-  }
-
-  // Helper method to build a placeholder widget
-  Widget _buildPlaceholder() {
-    return Container(
-      color: Colors.grey[300],
-      child: Center(
-        child: Icon(Icons.restaurant, size: 80, color: Colors.grey[600]),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<RecipeBloc, RecipeState>(
@@ -78,43 +52,16 @@ class _RecipeDetailViewState extends State<RecipeDetailView> {
                     background: Stack(
                       fit: StackFit.expand,
                       children: [
-                        recipe.imageUrl.isNotEmpty
-                            ? FutureBuilder<bool>(
-                              future: _checkImageExists(recipe.imageUrl),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return Center(
-                                    child: CircularProgressIndicator(),
-                                  );
-                                }
-
-                                final bool imageExists = snapshot.data ?? false;
-
-                                if (imageExists) {
-                                  // Load image from local assets folder
-                                  return Image.asset(
-                                    'assets/images/${recipe.imageUrl}',
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      print('Error loading image: $error');
-                                      return _buildPlaceholder();
-                                    },
-                                  );
-                                } else {
-                                  // Try to load from local file system
-                                  return Image.file(
-                                    File(recipe.imageUrl),
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      print('Error loading image: $error');
-                                      return _buildPlaceholder();
-                                    },
-                                  );
-                                }
-                              },
-                            )
-                            : _buildPlaceholder(),
+                        Image.network(
+                          recipe.imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Image.network(
+                              'https://source.unsplash.com/random/800x600/?food',
+                              fit: BoxFit.cover,
+                            );
+                          },
+                        ),
                         Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(

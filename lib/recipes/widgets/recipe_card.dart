@@ -1,6 +1,4 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 class RecipeCard extends StatelessWidget {
   final String title;
@@ -24,46 +22,6 @@ class RecipeCard extends StatelessWidget {
     this.isCompact = false,
   });
 
-  // Helper method to check if an image exists in assets
-  Future<bool> _checkImageExists(String imagePath) async {
-    try {
-      // First check if it's an asset
-      final assetPath = 'assets/images/$imagePath';
-      await rootBundle.load(assetPath);
-      return true;
-    } catch (e) {
-      // If not an asset, check if it's a file
-      final file = File(imagePath);
-      return await file.exists();
-    }
-  }
-
-  // Helper method to build a placeholder widget
-  Widget _buildPlaceholder(bool isCompact) {
-    return Container(
-      height: isCompact ? 120 : 180,
-      width: double.infinity,
-      color: Colors.grey[300],
-      child: Center(
-        child: Icon(
-          Icons.restaurant,
-          size: isCompact ? 40 : 60,
-          color: Colors.grey[600],
-        ),
-      ),
-    );
-  }
-
-  // Helper method to build a loading placeholder
-  Widget _buildLoadingPlaceholder(bool isCompact) {
-    return Container(
-      height: isCompact ? 120 : 180,
-      width: double.infinity,
-      color: Colors.grey[300],
-      child: const Center(child: CircularProgressIndicator()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -79,44 +37,12 @@ class RecipeCard extends StatelessWidget {
                 topLeft: Radius.circular(15),
                 topRight: Radius.circular(15),
               ),
-              child:
-                  imageUrl.isNotEmpty
-                      ? FutureBuilder<bool>(
-                        future: _checkImageExists(imageUrl),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return _buildLoadingPlaceholder(isCompact);
-                          }
-
-                          final bool imageExists = snapshot.data ?? false;
-
-                          if (imageExists) {
-                            // Load image from local assets folder
-                            return Image.asset(
-                              'assets/images/$imageUrl',
-                              height: isCompact ? 120 : 180,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return _buildPlaceholder(isCompact);
-                              },
-                            );
-                          } else {
-                            // Try to load from local file system
-                            return Image.file(
-                              File(imageUrl),
-                              height: isCompact ? 120 : 180,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return _buildPlaceholder(isCompact);
-                              },
-                            );
-                          }
-                        },
-                      )
-                      : _buildPlaceholder(isCompact),
+              child: Image.network(
+                imageUrl,
+                height: isCompact ? 120 : 180,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
             ),
             Padding(
               padding: EdgeInsets.all(isCompact ? 8.0 : 12.0),

@@ -1,12 +1,15 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 import '../bloc/recipe_bloc.dart';
 import '../bloc/recipe_event.dart';
 import '../bloc/recipe_state.dart';
+import '../../shared/services/storage_service.dart';
 
 class AddRecipeView extends StatefulWidget {
   const AddRecipeView({Key? key}) : super(key: key);
-  
+
   @override
   State<AddRecipeView> createState() => _AddRecipeViewState();
 }
@@ -16,11 +19,20 @@ class _AddRecipeViewState extends State<AddRecipeView> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _cookTimeController = TextEditingController();
-  final List<TextEditingController> _ingredientControllers = [TextEditingController()];
-  final List<TextEditingController> _stepControllers = [TextEditingController()];
+  final List<TextEditingController> _ingredientControllers = [
+    TextEditingController(),
+  ];
+  final List<TextEditingController> _stepControllers = [
+    TextEditingController(),
+  ];
   String _difficulty = 'Easy';
-  String? _imageUrl; // In a real app, this would be set by an image picker
-  
+  String? _imageUrl;
+  File? _imageFile;
+  bool _isUploading = false;
+
+  final ImagePicker _picker = ImagePicker();
+  final StorageService _storageService = StorageService();
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -34,13 +46,13 @@ class _AddRecipeViewState extends State<AddRecipeView> {
     }
     super.dispose();
   }
-  
+
   void _addIngredient() {
     setState(() {
       _ingredientControllers.add(TextEditingController());
     });
   }
-  
+
   void _removeIngredient(int index) {
     if (_ingredientControllers.length > 1) {
       setState(() {
@@ -49,13 +61,13 @@ class _AddRecipeViewState extends State<AddRecipeView> {
       });
     }
   }
-  
+
   void _addStep() {
     setState(() {
       _stepControllers.add(TextEditingController());
     });
   }
-  
+
   void _removeStep(int index) {
     if (_stepControllers.length > 1) {
       setState(() {
@@ -64,34 +76,110 @@ class _AddRecipeViewState extends State<AddRecipeView> {
       });
     }
   }
-  
-  void _submitForm() {
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
-      
-      // Get values from controllers
-      List<String> ingredients = _ingredientControllers
-          .map((controller) => controller.text.trim())
-          .where((text) => text.isNotEmpty)
-          .toList();
-      
-      List<String> steps = _stepControllers
-          .map((controller) => controller.text.trim())
-          .where((text) => text.isNotEmpty)
-          .toList();
-      
-      // Use RecipeBloc to add the recipe
-      context.read<RecipeBloc>().add(
-        AddRecipe(
-          title: _titleController.text.trim(),
-          description: _descriptionController.text.trim(),
-          cookTime: _cookTimeController.text.trim(),
-          difficulty: _difficulty,
-          ingredients: ingredients,
-          steps: steps,
-          imageUrl: _imageUrl ?? 'https://source.unsplash.com/random/400x300/?food',
+
+  // Pick image from gallery
+  Future<void> _pickImage() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error picking image: $e'),
+          backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  // Upload image to Firebase Storage
+  Future<String?> _uploadImage() async {
+    if (_imageFile == null) return null;
+
+    setState(() {
+      _isUploading = true;
+    });
+
+    try {
+      // Upload to Firebase Storage
+      final downloadUrl = await _storageService.uploadImage(
+        _imageFile!,
+        'recipe_images',
+      );
+      return downloadUrl;
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error uploading image: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return null;
+    } finally {
+      setState(() {
+        _isUploading = false;
+      });
+    }
+  }
+
+  void _submitForm() async {
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+
+      // Get values from controllers
+      List<String> ingredients =
+          _ingredientControllers
+              .map((controller) => controller.text.trim())
+              .where((text) => text.isNotEmpty)
+              .toList();
+
+      List<String> steps =
+          _stepControllers
+              .map((controller) => controller.text.trim())
+              .where((text) => text.isNotEmpty)
+              .toList();
+
+      // Upload image if selected
+      String? imageUrl = _imageUrl;
+      if (_imageFile != null) {
+        imageUrl = await _uploadImage();
+        if (imageUrl == null && mounted) {
+          // If upload failed, show error and return
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to upload image. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+
+      // Use RecipeBloc to add the recipe
+      if (mounted) {
+        context.read<RecipeBloc>().add(
+          AddRecipe(
+            title: _titleController.text.trim(),
+            description: _descriptionController.text.trim(),
+            cookTime: _cookTimeController.text.trim(),
+            difficulty: _difficulty,
+            ingredients: ingredients,
+            steps: steps,
+            imageUrl:
+                imageUrl ?? 'https://source.unsplash.com/random/400x300/?food',
+          ),
+        );
+      }
     }
   }
 
@@ -119,9 +207,7 @@ class _AddRecipeViewState extends State<AddRecipeView> {
       },
       builder: (context, state) {
         return Scaffold(
-          appBar: AppBar(
-            title: Text('Add New Recipe'),
-          ),
+          appBar: AppBar(title: Text('Add New Recipe')),
           body: Stack(
             children: [
               Form(
@@ -134,29 +220,70 @@ class _AddRecipeViewState extends State<AddRecipeView> {
                       // Recipe Image
                       Center(
                         child: GestureDetector(
-                          onTap: () {
-                            // Image picker logic would go here
-                          },
+                          onTap: _pickImage,
                           child: Container(
                             height: 200,
                             width: double.infinity,
                             decoration: BoxDecoration(
                               color: Colors.grey.shade200,
                               borderRadius: BorderRadius.circular(15),
+                              image:
+                                  _imageFile != null
+                                      ? DecorationImage(
+                                        image: FileImage(_imageFile!),
+                                        fit: BoxFit.cover,
+                                      )
+                                      : null,
                             ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add_a_photo, size: 50, color: Colors.grey),
-                                SizedBox(height: 10),
-                                Text('Add Recipe Photo'),
-                              ],
-                            ),
+                            child:
+                                _imageFile == null
+                                    ? Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.add_a_photo,
+                                          size: 50,
+                                          color: Colors.grey,
+                                        ),
+                                        SizedBox(height: 10),
+                                        Text('Add Recipe Photo'),
+                                      ],
+                                    )
+                                    : _isUploading
+                                    ? Center(child: CircularProgressIndicator())
+                                    : Stack(
+                                      alignment: Alignment.topRight,
+                                      children: [
+                                        // This is an empty container to maintain the stack
+                                        Container(),
+                                        // Remove image button
+                                        Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: CircleAvatar(
+                                            backgroundColor: Colors.red,
+                                            radius: 18,
+                                            child: IconButton(
+                                              icon: Icon(
+                                                Icons.close,
+                                                color: Colors.white,
+                                                size: 18,
+                                              ),
+                                              onPressed: () {
+                                                setState(() {
+                                                  _imageFile = null;
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                           ),
                         ),
                       ),
                       SizedBox(height: 20),
-                      
+
                       // Recipe Title
                       TextFormField(
                         controller: _titleController,
@@ -174,7 +301,7 @@ class _AddRecipeViewState extends State<AddRecipeView> {
                         },
                       ),
                       SizedBox(height: 15),
-                      
+
                       // Recipe Description
                       TextFormField(
                         controller: _descriptionController,
@@ -187,7 +314,7 @@ class _AddRecipeViewState extends State<AddRecipeView> {
                         maxLines: 3,
                       ),
                       SizedBox(height: 15),
-                      
+
                       // Cook Time
                       Row(
                         children: [
@@ -219,12 +346,15 @@ class _AddRecipeViewState extends State<AddRecipeView> {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
-                              items: ['Easy', 'Medium', 'Hard']
-                                  .map((label) => DropdownMenuItem(
-                                        value: label,
-                                        child: Text(label),
-                                      ))
-                                  .toList(),
+                              items:
+                                  ['Easy', 'Medium', 'Hard']
+                                      .map(
+                                        (label) => DropdownMenuItem(
+                                          value: label,
+                                          child: Text(label),
+                                        ),
+                                      )
+                                      .toList(),
                               onChanged: (value) {
                                 setState(() {
                                   _difficulty = value!;
@@ -235,7 +365,7 @@ class _AddRecipeViewState extends State<AddRecipeView> {
                         ],
                       ),
                       SizedBox(height: 20),
-                      
+
                       // Ingredients
                       Text(
                         'Ingredients',
@@ -258,7 +388,8 @@ class _AddRecipeViewState extends State<AddRecipeView> {
                                     ),
                                   ),
                                   validator: (value) {
-                                    if (idx == 0 && (value == null || value.isEmpty)) {
+                                    if (idx == 0 &&
+                                        (value == null || value.isEmpty)) {
                                       return 'Add at least one ingredient';
                                     }
                                     return null;
@@ -273,14 +404,14 @@ class _AddRecipeViewState extends State<AddRecipeView> {
                             ],
                           ),
                         );
-                      }).toList(),
+                      }),
                       TextButton.icon(
                         onPressed: _addIngredient,
                         icon: Icon(Icons.add),
                         label: Text('Add Ingredient'),
                       ),
                       SizedBox(height: 20),
-                      
+
                       // Steps
                       Text(
                         'Instructions',
@@ -323,7 +454,8 @@ class _AddRecipeViewState extends State<AddRecipeView> {
                                   ),
                                   maxLines: 2,
                                   validator: (value) {
-                                    if (idx == 0 && (value == null || value.isEmpty)) {
+                                    if (idx == 0 &&
+                                        (value == null || value.isEmpty)) {
                                       return 'Add at least one step';
                                     }
                                     return null;
@@ -338,14 +470,14 @@ class _AddRecipeViewState extends State<AddRecipeView> {
                             ],
                           ),
                         );
-                      }).toList(),
+                      }),
                       TextButton.icon(
                         onPressed: _addStep,
                         icon: Icon(Icons.add),
                         label: Text('Add Step'),
                       ),
                       SizedBox(height: 30),
-                      
+
                       // Submit Button
                       SizedBox(
                         width: double.infinity,
@@ -358,7 +490,10 @@ class _AddRecipeViewState extends State<AddRecipeView> {
                               borderRadius: BorderRadius.circular(20),
                             ),
                           ),
-                          child: Text('SAVE RECIPE', style: TextStyle(fontSize: 16)),
+                          child: Text(
+                            'SAVE RECIPE',
+                            style: TextStyle(fontSize: 16),
+                          ),
                         ),
                       ),
                     ],
@@ -367,10 +502,8 @@ class _AddRecipeViewState extends State<AddRecipeView> {
               ),
               if (state is RecipeLoading)
                 Container(
-                  color: Colors.black.withOpacity(0.3),
-                  child: Center(
-                    child: CircularProgressIndicator(),
-                  ),
+                  color: Colors.black.withAlpha(76), // 0.3 opacity
+                  child: Center(child: CircularProgressIndicator()),
                 ),
             ],
           ),
