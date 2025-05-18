@@ -30,7 +30,7 @@ class Experience {
   // Create an Experience from a Firestore document
   factory Experience.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-    
+
     return Experience(
       id: doc.id,
       recipeId: data['recipeId'] ?? '',

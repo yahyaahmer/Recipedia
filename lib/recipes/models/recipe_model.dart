@@ -13,6 +13,7 @@ class Recipe {
   final List<String> steps;
   final double rating;
   final int ratingCount;
+  final int experienceCount;
   final DateTime createdAt;
 
   Recipe({
@@ -28,13 +29,14 @@ class Recipe {
     required this.steps,
     this.rating = 0.0,
     this.ratingCount = 0,
+    this.experienceCount = 0,
     required this.createdAt,
   });
 
   // Create a Recipe from a Firestore document
   factory Recipe.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-    
+
     return Recipe(
       id: doc.id,
       title: data['title'] ?? '',
@@ -48,6 +50,7 @@ class Recipe {
       steps: List<String>.from(data['steps'] ?? []),
       rating: (data['rating'] ?? 0.0).toDouble(),
       ratingCount: data['ratingCount'] ?? 0,
+      experienceCount: data['experienceCount'] ?? 0,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
     );
   }
@@ -66,6 +69,7 @@ class Recipe {
       'steps': steps,
       'rating': rating,
       'ratingCount': ratingCount,
+      'experienceCount': experienceCount,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
@@ -84,6 +88,7 @@ class Recipe {
     List<String>? steps,
     double? rating,
     int? ratingCount,
+    int? experienceCount,
     DateTime? createdAt,
   }) {
     return Recipe(
@@ -99,6 +104,7 @@ class Recipe {
       steps: steps ?? this.steps,
       rating: rating ?? this.rating,
       ratingCount: ratingCount ?? this.ratingCount,
+      experienceCount: experienceCount ?? this.experienceCount,
       createdAt: createdAt ?? this.createdAt,
     );
   }

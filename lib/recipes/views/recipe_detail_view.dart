@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../food_diary/widgets/experience_card.dart';
+import '../../food_diary/widgets/experience_list_item.dart';
 import '../../food_diary/bloc/diary_bloc.dart';
 import '../../food_diary/bloc/diary_event.dart';
 import '../../food_diary/bloc/diary_state.dart';
@@ -16,6 +16,8 @@ class RecipeDetailView extends StatefulWidget {
 }
 
 class _RecipeDetailViewState extends State<RecipeDetailView> {
+  bool _isExperiencesExpanded = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -174,24 +176,47 @@ class _RecipeDetailViewState extends State<RecipeDetailView> {
                           ),
                           const SizedBox(height: 30),
 
-                          // Experiences section
-                          BlocBuilder<DiaryBloc, DiaryState>(
-                            builder: (context, state) {
-                              int experienceCount = 0;
-                              if (state is ExperiencesLoaded) {
-                                experienceCount = state.experiences.length;
-                              }
-
-                              return Row(
+                          // Experiences section with dropdown
+                          Column(
+                            children: [
+                              // Header with dropdown toggle
+                              Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    'Experiences ($experienceCount)',
-                                    style:
-                                        Theme.of(
-                                          context,
-                                        ).textTheme.headlineMedium,
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Experiences (${recipe.experienceCount})',
+                                        style:
+                                            Theme.of(
+                                              context,
+                                            ).textTheme.headlineMedium,
+                                      ),
+                                      IconButton(
+                                        icon: Icon(
+                                          _isExperiencesExpanded
+                                              ? Icons.keyboard_arrow_up
+                                              : Icons.keyboard_arrow_down,
+                                          color: Theme.of(context).primaryColor,
+                                        ),
+                                        onPressed: () {
+                                          setState(() {
+                                            _isExperiencesExpanded =
+                                                !_isExperiencesExpanded;
+
+                                            // Fetch experiences when expanding
+                                            if (_isExperiencesExpanded) {
+                                              context.read<DiaryBloc>().add(
+                                                FetchRecipeExperiences(
+                                                  recipeId: recipe.id,
+                                                ),
+                                              );
+                                            }
+                                          });
+                                        },
+                                      ),
+                                    ],
                                   ),
                                   TextButton.icon(
                                     onPressed: () {
@@ -200,60 +225,66 @@ class _RecipeDetailViewState extends State<RecipeDetailView> {
                                         arguments: recipe.id,
                                       );
                                     },
-                                    icon: const Icon(Icons.add_photo_alternate),
                                     label: const Text('Add Your Experience'),
                                     style: TextButton.styleFrom(
                                       backgroundColor:
                                           Theme.of(context).primaryColor,
+                                      foregroundColor: Colors.white,
                                     ),
                                   ),
                                 ],
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 10),
+                              ),
 
-                          // Display experiences
-                          BlocBuilder<DiaryBloc, DiaryState>(
-                            builder: (context, state) {
-                              if (state is DiaryLoading) {
-                                return const Center(
-                                  child: CircularProgressIndicator(),
-                                );
-                              } else if (state is ExperiencesLoaded) {
-                                final experiences = state.experiences;
-                                if (experiences.isEmpty) {
-                                  return const Center(
-                                    child: Padding(
-                                      padding: EdgeInsets.all(16.0),
-                                      child: Text(
-                                        'No experiences yet. Be the first to share!',
-                                      ),
-                                    ),
-                                  );
-                                }
+                              // Experiences list (only shown when expanded)
+                              if (_isExperiencesExpanded)
+                                BlocBuilder<DiaryBloc, DiaryState>(
+                                  builder: (context, state) {
+                                    if (state is DiaryLoading) {
+                                      return const Padding(
+                                        padding: EdgeInsets.all(16.0),
+                                        child: Center(
+                                          child: CircularProgressIndicator(),
+                                        ),
+                                      );
+                                    } else if (state is ExperiencesLoaded) {
+                                      final experiences = state.experiences;
+                                      if (experiences.isEmpty) {
+                                        return const Center(
+                                          child: Padding(
+                                            padding: EdgeInsets.all(16.0),
+                                            child: Text(
+                                              'No experiences yet. Be the first to share!',
+                                            ),
+                                          ),
+                                        );
+                                      }
 
-                                return Column(
-                                  children:
-                                      experiences
-                                          .map(
-                                            (experience) => ExperienceCard(
+                                      return SizedBox(
+                                        height:
+                                            300, // Fixed height for scrollable container
+                                        child: ListView.builder(
+                                          shrinkWrap: true,
+                                          itemCount: experiences.length,
+                                          itemBuilder: (context, index) {
+                                            final experience =
+                                                experiences[index];
+                                            return ExperienceListItem(
                                               username: experience.username,
                                               rating: experience.rating,
                                               comment: experience.comment,
-                                              imageUrl: experience.imageUrl,
-                                              userImageUrl:
-                                                  experience.userImageUrl,
-                                              date:
-                                                  '2 days ago', // TODO: Calculate actual date
-                                            ),
-                                          )
-                                          .toList(),
-                                );
-                              } else {
-                                return const SizedBox.shrink();
-                              }
-                            },
+                                              date: _formatDate(
+                                                experience.createdAt,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      );
+                                    } else {
+                                      return const SizedBox.shrink();
+                                    }
+                                  },
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 20),
                         ],
@@ -376,5 +407,25 @@ class _RecipeDetailViewState extends State<RecipeDetailView> {
         ],
       ),
     );
+  }
+
+  // Format date to a relative time string (e.g., "2 days ago")
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays > 365) {
+      return '${(difference.inDays / 365).floor()} ${(difference.inDays / 365).floor() == 1 ? 'year' : 'years'} ago';
+    } else if (difference.inDays > 30) {
+      return '${(difference.inDays / 30).floor()} ${(difference.inDays / 30).floor() == 1 ? 'month' : 'months'} ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays} ${difference.inDays == 1 ? 'day' : 'days'} ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} ${difference.inHours == 1 ? 'hour' : 'hours'} ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} ${difference.inMinutes == 1 ? 'minute' : 'minutes'} ago';
+    } else {
+      return 'Just now';
+    }
   }
 }
