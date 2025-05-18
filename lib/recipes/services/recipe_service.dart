@@ -5,23 +5,63 @@ import '../models/recipe_model.dart';
 class RecipeService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  
+
   // Collection references
-  CollectionReference get _recipesCollection => _firestore.collection('recipes');
-  
+  CollectionReference get _recipesCollection =>
+      _firestore.collection('recipes');
+
   // Get current user ID
   String? get currentUserId => _auth.currentUser?.uid;
-  
+
   // Get all recipes
-  Stream<List<Recipe>> getRecipes() {
-    return _recipesCollection
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) => Recipe.fromFirestore(doc)).toList();
-    });
+  Stream<List<Recipe>> getRecipes({String? difficultyFilter}) {
+    print('Getting recipes with difficulty filter: $difficultyFilter');
+
+    // If no filter is applied, use the simple query with ordering
+    if (difficultyFilter == null || difficultyFilter.isEmpty) {
+      print('No filter applied, fetching all recipes');
+      return _recipesCollection
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((snapshot) {
+            print('Fetched ${snapshot.docs.length} recipes without filter');
+            return snapshot.docs
+                .map((doc) => Recipe.fromFirestore(doc))
+                .toList();
+          });
+    }
+    // If filter is applied, we'll handle the filtering in memory to avoid index issues
+    else {
+      print('Applying filter: difficulty = $difficultyFilter');
+      return _recipesCollection
+          .where('difficulty', isEqualTo: difficultyFilter)
+          .snapshots()
+          .map((snapshot) {
+            print(
+              'Fetched ${snapshot.docs.length} recipes with difficulty = $difficultyFilter',
+            );
+
+            // Debug: Print all difficulties in the collection
+            _firestore.collection('recipes').get().then((allRecipes) {
+              print('Total recipes in collection: ${allRecipes.docs.length}');
+              print('Difficulties in collection:');
+              for (var doc in allRecipes.docs) {
+                final data = doc.data();
+                print('- ${data['difficulty']} (Document ID: ${doc.id})');
+              }
+            });
+
+            // Sort the filtered results in memory
+            final recipes =
+                snapshot.docs.map((doc) => Recipe.fromFirestore(doc)).toList();
+            recipes.sort(
+              (a, b) => b.createdAt.compareTo(a.createdAt),
+            ); // Sort by createdAt descending
+            return recipes;
+          });
+    }
   }
-  
+
   // Get popular recipes
   Stream<List<Recipe>> getPopularRecipes() {
     return _recipesCollection
@@ -29,10 +69,10 @@ class RecipeService {
         .limit(10)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) => Recipe.fromFirestore(doc)).toList();
-    });
+          return snapshot.docs.map((doc) => Recipe.fromFirestore(doc)).toList();
+        });
   }
-  
+
   // Get recipes by user
   Stream<List<Recipe>> getUserRecipes(String userId) {
     return _recipesCollection
@@ -40,10 +80,10 @@ class RecipeService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) => Recipe.fromFirestore(doc)).toList();
-    });
+          return snapshot.docs.map((doc) => Recipe.fromFirestore(doc)).toList();
+        });
   }
-  
+
   // Get recipe by ID
   Future<Recipe?> getRecipeById(String recipeId) async {
     DocumentSnapshot doc = await _recipesCollection.doc(recipeId).get();
@@ -52,7 +92,7 @@ class RecipeService {
     }
     return null;
   }
-  
+
   // Add a new recipe
   Future<String> addRecipe({
     required String title,
@@ -66,10 +106,10 @@ class RecipeService {
     if (currentUserId == null) {
       throw Exception('User not authenticated');
     }
-    
+
     // Get current user's display name
     String authorName = _auth.currentUser?.displayName ?? 'Anonymous';
-    
+
     // Create recipe data
     Map<String, dynamic> recipeData = {
       'title': title,
@@ -85,12 +125,12 @@ class RecipeService {
       'ratingCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
     };
-    
+
     // Add to Firestore
     DocumentReference docRef = await _recipesCollection.add(recipeData);
     return docRef.id;
   }
-  
+
   // Update a recipe
   Future<void> updateRecipe({
     required String recipeId,
@@ -105,18 +145,18 @@ class RecipeService {
     if (currentUserId == null) {
       throw Exception('User not authenticated');
     }
-    
+
     // Get the recipe to check ownership
     DocumentSnapshot doc = await _recipesCollection.doc(recipeId).get();
     if (!doc.exists) {
       throw Exception('Recipe not found');
     }
-    
+
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     if (data['authorId'] != currentUserId) {
       throw Exception('You do not have permission to update this recipe');
     }
-    
+
     // Create update data
     Map<String, dynamic> updateData = {};
     if (title != null) updateData['title'] = title;
@@ -126,49 +166,49 @@ class RecipeService {
     if (difficulty != null) updateData['difficulty'] = difficulty;
     if (ingredients != null) updateData['ingredients'] = ingredients;
     if (steps != null) updateData['steps'] = steps;
-    
+
     // Update in Firestore
     await _recipesCollection.doc(recipeId).update(updateData);
   }
-  
+
   // Delete a recipe
   Future<void> deleteRecipe(String recipeId) async {
     if (currentUserId == null) {
       throw Exception('User not authenticated');
     }
-    
+
     // Get the recipe to check ownership
     DocumentSnapshot doc = await _recipesCollection.doc(recipeId).get();
     if (!doc.exists) {
       throw Exception('Recipe not found');
     }
-    
+
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     if (data['authorId'] != currentUserId) {
       throw Exception('You do not have permission to delete this recipe');
     }
-    
+
     // Delete from Firestore
     await _recipesCollection.doc(recipeId).delete();
   }
-  
+
   // Update recipe rating
   Future<void> updateRecipeRating(String recipeId, double newRating) async {
     DocumentSnapshot doc = await _recipesCollection.doc(recipeId).get();
     if (!doc.exists) {
       throw Exception('Recipe not found');
     }
-    
+
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     double currentRating = (data['rating'] ?? 0.0).toDouble();
     int ratingCount = (data['ratingCount'] ?? 0);
-    
+
     // Calculate new average rating
     double totalRating = currentRating * ratingCount;
     totalRating += newRating;
     ratingCount += 1;
     double averageRating = totalRating / ratingCount;
-    
+
     // Update in Firestore
     await _recipesCollection.doc(recipeId).update({
       'rating': averageRating,

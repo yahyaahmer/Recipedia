@@ -33,14 +33,16 @@ class RecipeBloc extends Bloc<RecipeEvent, RecipeState> {
     emit(RecipeLoading());
     try {
       await _recipesSubscription?.cancel();
-      _recipesSubscription = _recipeService.getRecipes().listen(
-        (recipes) {
-          add(RecipesUpdated(recipes: recipes));
-        },
-        onError: (error) {
-          add(RecipeErrorEvent(message: error.toString()));
-        },
-      );
+      _recipesSubscription = _recipeService
+          .getRecipes(difficultyFilter: event.difficultyFilter)
+          .listen(
+            (recipes) {
+              add(RecipesUpdated(recipes: recipes));
+            },
+            onError: (error) {
+              add(RecipeErrorEvent(message: error.toString()));
+            },
+          );
     } catch (e) {
       emit(RecipeError(message: e.toString()));
     }

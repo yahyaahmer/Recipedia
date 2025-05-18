@@ -4,8 +4,9 @@ abstract class RecipeEvent {}
 
 class FetchRecipes extends RecipeEvent {
   final String? category;
+  final String? difficultyFilter;
 
-  FetchRecipes({this.category});
+  FetchRecipes({this.category, this.difficultyFilter});
 }
 
 class FetchPopularRecipes extends RecipeEvent {}
