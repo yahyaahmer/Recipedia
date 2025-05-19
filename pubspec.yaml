@@ -52,6 +52,11 @@ dependencies:
   intl: ^0.18.1
   google_fonts: ^6.1.0
 
+  # Cloudinary
+  cloudinary_public: ^0.23.1
+  http: ^1.1.0
+  dio: ^5.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
