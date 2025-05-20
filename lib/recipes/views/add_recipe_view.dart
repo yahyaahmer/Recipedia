@@ -491,8 +491,8 @@ class _AddRecipeViewState extends State<AddRecipeView> {
                             ),
                           ),
                           child: Text(
-                            'SAVE RECIPE',
-                            style: TextStyle(fontSize: 16),
+                            'Save Recipe',
+                            style: TextStyle(fontSize: 16, color: Colors.white),
                           ),
                         ),
                       ),
